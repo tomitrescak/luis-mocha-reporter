@@ -37,14 +37,43 @@ function saveResults (testData) {
     if (!testData) {
         throw new Error('Test data missing or malformed');
     }
+    
     let savePath = path.join(process.env.JEST_ROOT_OUTPUT_PATH || rootDir, 'summary.json');
+    let p = path.resolve(savePath);
+
     let clone = Object.assign({}, testData);
     delete (clone.startTime);
     clone.testResults.forEach(t => delete (t.perfStats));
-    let saveContent = JSON.stringify(clone, null, 2);
     
-    checkSaveFile(savePath, saveContent);
-    
+    // get the previous file and merge results with previous run
+    try {
+      fs.statSync(savePath);
+      const merged = require(p);
+
+      // copy properties
+      for (let key of Object.getOwnPropertyNames(merged).filter(k => k!= 'testResults')) {
+        merged[key] = clone[key];
+      }
+
+      for (let result of clone.testResults) {
+        let p = merged.testResults.findIndex(f => f.testFilePath === result.testFilePath);
+        if (p >= 0) {
+          merged.testResults[p] = result;
+        }
+      }
+
+      let saveContent = JSON.stringify(merged, null, 2);
+      checkSaveFile(savePath, saveContent);
+
+      testData = merged;
+
+    } catch (ex) {
+      let saveContent = JSON.stringify(clone, null, 2);
+      checkSaveFile(savePath, saveContent);
+
+      console.log(ex.message);
+    }
+
     let imports = 'module.exports = {\n';
     let root = path.resolve(process.env.JEST_ROOT_OUTPUT_PATH || rootDir);
     // console.log(root);
